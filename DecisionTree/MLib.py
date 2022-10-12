@@ -70,8 +70,8 @@ def bestValue(S, empty_indicator = 'unknown'):
     best_value = l[c.argmax()] # find the most common value (index into L with the index of the largest # in c)
     return best_value
 
-def importData(filename, attrib, attrib_labels, data_labels, index_col=0, numeric_data=None, empty_indicator='unknown'):
-    terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object
+def importData(filename, attrib, attrib_labels, data_labels, index_col=None, numeric_data=None, empty_indicator=None):
+    terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
     if (numeric_data != None): # if there is information on which columns are numeric
         for label in numeric_data.keys(): #the for all the labels in numeric data
             column = terms.get(label) # get the column pertaining to that label
@@ -82,14 +82,14 @@ def importData(filename, attrib, attrib_labels, data_labels, index_col=0, numeri
             new_column.where(column <= split_value, numeric_data[label][0], inplace=True) 
             new_column.where(column > split_value, numeric_data[label][1], inplace=True)
             terms[label] = new_column # replace the column with the updated one
-
-    for A in terms.columns.to_numpy():
-        if(terms[A].unique().__contains__(empty_indicator)): # if the column contains unknown values
-            column2 = terms.get(A) # get that column
-            new_column2 = column2.copy(deep=True)  # make a duplicate of the column
-            best_value = bestValue(column2, empty_indicator)
-            new_column2.where(column2 != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
-            terms[A] = new_column2 # replace the column with the updated values
+    if (empty_indicator != None):
+        for A in terms.columns.to_numpy():
+            if(terms[A].unique().__contains__(empty_indicator)): # if the column contains unknown values
+                column2 = terms.get(A) # get that column
+                new_column2 = column2.copy(deep=True)  # make a duplicate of the column
+                best_value = bestValue(column2, empty_indicator)
+                new_column2.where(column2 != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
+                terms[A] = new_column2 # replace the column with the updated values
 
     if (not validData(terms, attrib, data_labels)): # check for incorrect attribute values
         return
@@ -244,12 +244,27 @@ def printTree(tree):
 def treeError(tree, S):
     c_right = 0
     c_wrong = 0
+    ht_xi = list()
     for data in S.itertuples(index=True): # for each datapoint in S
-        if (data.Index != follower(data._asdict(), tree)): # check if the label returned by the tree is the same as the provided label
+        prediction = follower(data._asdict(), tree)
+        if (data.Index != prediction): # check if the label returned by the tree is the same as the provided label
             c_wrong += 1
             #print("not a match")
         else:
             c_right += 1
             #print("matched!")
+        
     error = c_wrong / (c_right + c_wrong) # find the ratio of wrong answers to all answers (error)
     return error
+
+def updateWeights(weights):
+    return
+
+def adaBoost(S, attribs, T):
+    m = S.shape[0]
+    D = np.ones([m, 1]) * 1/m
+    for t in np.arange(1,T):
+        h_t = ID3(S, attribs, None, 'entropy',1)
+        e_t = treeError(h_t, S)
+        alpha_t = 1/2 * np.log((1-e_t)/e_t)
+        D = D * np.exp(-alpha_t * S.keys() )
