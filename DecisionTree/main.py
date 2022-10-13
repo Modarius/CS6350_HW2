@@ -1,6 +1,4 @@
 import MLib as ml
-import numpy as np
-import pandas as pd
 
 def main():
     # initilalization data for bank dataset
@@ -8,7 +6,7 @@ def main():
     attribs = {
         'age':{'young', 'old'}, # this is a numeric value which will be converted to categorical
         'job':{'admin.','unemployed','management','housemaid','entrepreneur','student',
-            'blue-collar','self-employed','retired','technician','services'}, # 'unknown'
+            'blue-collar','self-employed','retired','technician','services', 'unknown'}, # 'unknown'
         'marital':{'married','divorced','single'},
         'education':{'secondary','primary','tertiary', 'unknown'},  # 'unknown'
         'default':{'yes', 'no'}, 
@@ -23,11 +21,10 @@ def main():
         'pdays':{'few', 'many'}, # this is a numeric value which will be converted to categorical
         'previous':{'few', 'many'}, # this is a numeric value which will be converted to categorical
         'poutcome':{'other', 'failure', 'success', 'unknown'}, # 'unknown'
-        'label':{'no', 'yes'}
+        'label':{-1, 1} # {'no', 'yes'}
         }
-    data_labels = {'yes', 'no'}
     train_filepath = 'bank/train.csv'
-    test_filepath = 'bank/test.csv'
+    tests_filepath = 'bank/test.csv'
     numeric_data = {
         'age':['young', 'old'], # this is a numeric value which will be converted to categorical
         'balance':['low', 'high'], # this is a numeric value which will be converted to categorical
@@ -37,17 +34,12 @@ def main():
         'pdays':['few', 'many'], # this is a numeric value which will be converted to categorical
         'previous':['few', 'many'], # this is a numeric value which will be converted to categorical
         }
-    index_col = 16 
-    max_depth = 1
+    new_labels = {'no': -1, 'yes': 1}
     
-    training_data = ml.importData(train_filepath, attribs, attrib_labels, data_labels, numeric_data=numeric_data, index_col=index_col)
-    test_data = ml.importData(test_filepath, attribs, attrib_labels, data_labels, numeric_data=numeric_data, index_col=index_col)
+    train_data = ml.importData(train_filepath, attribs, attrib_labels, numeric_data=numeric_data, change_label=new_labels)
+    tests_data = ml.importData(tests_filepath, attribs, attrib_labels, numeric_data=numeric_data, change_label=new_labels)
 
-    tree = ml.ID3(training_data, attribs, None, 'entropy', max_depth) # build the tree
-    ml.printTree(tree) # crude print of tree
-    print('Avg Error Training Dataset = ' + str(ml.treeError(tree, training_data))) # test the error for the given dataset
-    print('Avg Error Test Dataset = ' + str(ml.treeError(tree, test_data))) # test the error for the given dataset
-
+    ml.adaBoost(train_data, attribs=attribs, T=10)
     return
 
 if __name__ == "__main__":

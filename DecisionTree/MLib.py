@@ -1,5 +1,6 @@
 # Written by Alan Felt for CS6350 Machine Learning
 
+from cProfile import label
 import numpy as np
 import pandas as pd
 
@@ -7,13 +8,13 @@ import pandas as pd
 # for leaf nodes, name is the same as the branch it is connected to
 # for regular nodes, name is the name of the attribute it represents. Its children will be named the values of the attributes values
 class Node:
-    def __init__(self, name_in, type_in, parent_node_in, children_node_in, label_in, depth_in):
-        self.name = name_in  # name of the node
-        self.type = type_in  # 'root', 'node', 'leaf', 'unknown'
-        self.parent = parent_node_in  # will include a node (if not the root)
-        self.children = children_node_in  # will include node(s) instance
-        self.label = label_in
-        self.depth = depth_in
+    def __init__(self, name, type, parent, children, label, depth):
+        self.name = name  # name of the node
+        self.type = type  # 'root', 'node', 'leaf', 'unknown'
+        self.parent = parent  # will include a node (if not the root)
+        self.children = children  # will include node(s) instance
+        self.label = label
+        self.depth = depth
         return
 
     def setChild(self, child_name_in, child_node_in):
@@ -47,30 +48,31 @@ class Node:
             return self.children[child_name_in] # return the child node with the attribute provided in child_name_in
 
 
-def validData(terms, attrib, data_labels):
-    for A in attrib.keys(): # for all the attributes possible
-        data_attrib_values = set(terms.get(A).unique()) # get the set of values for attribute A
-        if (not attrib[A].issubset(data_attrib_values)): # check if there is a value from the data not included in the possible values for A
+def validData(terms, attrib):
+    for label in attrib.keys(): # for all the attributes possible
+        label_values = set(terms.get(label).unique()) # get the set of values for attribute A
+        if (not attrib[label].issubset(label_values)): # check if there is a value from the data not included in the possible values for A
             # print the offending invalid attribute value
-            print("Attribute " + A + " cannot take value " +
-                  str(data_attrib_values.difference(attrib[A])))
+            print("Attribute " + label + " cannot take value " +
+                  str(label_values.difference(attrib[label])))
             return False
-    if (not set(terms.index.unique().to_numpy()).issubset(data_labels)): # also check that all the labels are valid
-        print("Data Label cannot take value " +
-              str(set(terms.index.unique()).difference(data_labels))) # return values that are not valid
-        return False
+    # if (not set(terms.index.unique().to_numpy()).issubset(data_labels)): # also check that all the labels are valid
+    #     print("Data Label cannot take value " +
+    #           str(set(terms.index.unique()).difference(data_labels))) # return values that are not valid
+    #     return False
     return True
 
-def bestValue(S, empty_indicator = 'unknown'):
+def bestValue(S, empty_indicator=None):
     l, c = np.unique(S.to_numpy(), return_counts=True) # find the most comon value in attribute A
-    # this is a hacky way of getting the index of 'unknown' in l and c (unique labels, and their counts)
-    idx = np.squeeze(np.where(l == empty_indicator))[()] # https://thispointer.com/find-the-index-of-a-value-in-numpy-array/, https://stackoverflow.com/questions/773030/why-are-0d-arrays-in-numpy-not-considered-scalar
-    l = np.delete(l, idx) # remove unknown from the running for most common value
-    c = np.delete(c, idx) # remove unknown from the running for most common value
+    if (empty_indicator != None):
+        # this is a hacky way of getting the index of 'unknown' in l and c (unique labels, and their counts)
+        idx = np.squeeze(np.where(l == empty_indicator))[()] # https://thispointer.com/find-the-index-of-a-value-in-numpy-array/, https://stackoverflow.com/questions/773030/why-are-0d-arrays-in-numpy-not-considered-scalar
+        l = np.delete(l, idx) # remove unknown from the running for most common value
+        c = np.delete(c, idx) # remove unknown from the running for most common value
     best_value = l[c.argmax()] # find the most common value (index into L with the index of the largest # in c)
     return best_value
 
-def importData(filename, attrib, attrib_labels, data_labels, index_col=None, numeric_data=None, empty_indicator=None):
+def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=None, empty_indicator=None, change_label=None):
     terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
     if (numeric_data != None): # if there is information on which columns are numeric
         for label in numeric_data.keys(): #the for all the labels in numeric data
@@ -83,21 +85,22 @@ def importData(filename, attrib, attrib_labels, data_labels, index_col=None, num
             new_column.where(column > split_value, numeric_data[label][1], inplace=True)
             terms[label] = new_column # replace the column with the updated one
     if (empty_indicator != None):
-        for A in terms.columns.to_numpy():
-            if(terms[A].unique().__contains__(empty_indicator)): # if the column contains unknown values
-                column2 = terms.get(A) # get that column
-                new_column2 = column2.copy(deep=True)  # make a duplicate of the column
-                best_value = bestValue(column2, empty_indicator)
-                new_column2.where(column2 != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
-                terms[A] = new_column2 # replace the column with the updated values
+        for label in terms.columns.to_numpy():
+            if(terms[label].unique().__contains__(empty_indicator)): # if the column contains unknown values
+                column = terms[label] # get that column
+                best_value = bestValue(terms[label], empty_indicator)
+                terms[label].where(column != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
+    if (change_label != None):
+        for raw_label in change_label.keys():
+            terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
 
-    if (not validData(terms, attrib, data_labels)): # check for incorrect attribute values
+    if (not validData(terms, attrib)): # check for incorrect attribute values
         return
     return terms
 
 
 def entropy(S):
-    labels = S.index.to_numpy() # get the labels in S
+    labels = S['label'].to_numpy() # get the labels in S
     num_S = len(labels) # number of labels is size of S
     l, c = np.unique(labels, return_counts=True) # find unique labels in S
     p = c / num_S # calculate array of probabilities of each label
@@ -105,8 +108,13 @@ def entropy(S):
     return H_S
 
 
+def weightEntropy(S, weights):
+    labels = S['label'].to_numpy()
+    total = sum(labels)
+    
+
 def majorityError(S): 
-    labels = S.index.to_numpy()  # get all the labels in the current set S
+    labels = S['label'].to_numpy()  # get all the labels in the current set S
     num_S = len(labels)  # count the labels
 
     # find all the unique labels and how many of each unique label there are
@@ -125,7 +133,7 @@ def majorityError(S):
 
 
 def giniIndex(S):
-    labels = S.index.to_numpy() # get all labels in S
+    labels = S['label'].to_numpy() # get all labels in S
     num_S = len(labels) # count the labels in S
     l, c = np.unique(labels, return_counts=True) # find the unique labels and their respective counts
     p_l = c / num_S # calculate the probability of each label
@@ -133,7 +141,7 @@ def giniIndex(S):
     return gi
 
 
-def bestAttribute(S, method='entropy'):
+def bestAttribute(S, method='entropy', weights=None):
     if (method == 'majority_error'): # choose method to use
         Purity_S = majorityError(S)
     elif (method == 'gini'):
@@ -149,7 +157,7 @@ def bestAttribute(S, method='entropy'):
     best_ig = 0 # track the best information gain
     best_attribute = "" # track the Attribute of the best information gain
 
-    for A in S.columns:  # for each attribute in S
+    for A in S.drop('label', axis=1).columns:  # for each attribute in S except for the label https://stackoverflow.com/questions/29763620/how-to-select-all-columns-except-one-in-pandas
         total = 0
         # get the unique values that attribute A has in S
         values_A = S.get(A).unique()
@@ -178,16 +186,30 @@ def bestAttribute(S, method='entropy'):
 
 
 def bestLabel(S):
-    l, c = np.unique(S.index.to_numpy(), return_counts=True) # find the best label in S (most common)
+    l, c = np.unique(S['label'].to_numpy(), return_counts=True) # find the best label in S (most common)
     best_label = l[c.argmax()]
     return best_label
 
+# assumes that there is at least one attribute to split on
+def stump(S, attribs, method="entropy", weights=None):
+    A = bestAttribute(S, method, weights)
+    new_root = Node(A, "root", None, None, None, 0)
+    for v in attribs[A]:
+        Sv = S[S[A] == v].drop(A, axis=1) # find the subset where S[A] == v and drop the column A
+        if (Sv.index.size == 0):  # if the subset is empty, make a child with the best label in S
+            label = bestLabel(S)
+        else:
+            label = bestLabel(Sv)
+        v_child = Node(name=v, type="leaf", parent=new_root, children=None, label=label, depth=1)
+        new_root.setChild(v, v_child) # set a new child of new_root
+    return new_root
 
-def ID3(S, attribs, root, method, max_depth):
+
+def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf):
     # Check if all examples have one label
     # Check whether there are no more attributes to split on
     # if so make a leaf node
-    if (S.index.unique().size == 1 or S.columns.size == 0):
+    if (S['label'].unique().size == 1 or S.columns.size == 1): # columns.size == 1 because the label column does not count
         label = bestLabel(S)
         return Node(label, "leaf", None, None, label, root.getDepth() + 1)
 
@@ -231,7 +253,7 @@ def printTree(tree):
     print('\t' * tree.getDepth(), end='') # pad the name by depth # of tab characters
 
     if(ttype == "leaf"): # if we're a leaf, print the label with || around it
-        print('|' + tlabel + '|')
+        print('|' + str(tlabel) + '|')
         return
     elif(ttype == "root" or ttype == "node"): # if we're a root or node, just print the name
         print(tname)
@@ -244,10 +266,9 @@ def printTree(tree):
 def treeError(tree, S):
     c_right = 0
     c_wrong = 0
-    ht_xi = list()
-    for data in S.itertuples(index=True): # for each datapoint in S
+    for data in S.itertuples(): # for each datapoint in S
         prediction = follower(data._asdict(), tree)
-        if (data.Index != prediction): # check if the label returned by the tree is the same as the provided label
+        if (data.label != prediction): # check if the label returned by the tree is the same as the provided label
             c_wrong += 1
             #print("not a match")
         else:
@@ -257,14 +278,21 @@ def treeError(tree, S):
     error = c_wrong / (c_right + c_wrong) # find the ratio of wrong answers to all answers (error)
     return error
 
+def processData(tree, S):
+    ht_xi = np.squeeze(np.zeros([S.index.size, 1]))
+    for data in S.itertuples(index=True): # for each datapoint in S
+        ht_xi[data.Index] = follower(data._asdict(), tree)
+    return ht_xi
+        
+
 def updateWeights(weights):
     return
 
 def adaBoost(S, attribs, T):
-    m = S.shape[0]
-    D = np.ones([m, 1]) * 1/m
+    m = S.index.size
+    D = np.squeeze(np.ones([1, m])) * 1/m
     for t in np.arange(1,T):
-        h_t = ID3(S, attribs, None, 'entropy',1)
-        e_t = treeError(h_t, S)
+        h_t = stump(S=S, attribs=attribs, method='entropy', weights=D)
+        e_t = processData(tree=h_t, S=S)
         alpha_t = 1/2 * np.log((1-e_t)/e_t)
         D = D * np.exp(-alpha_t * S.keys() )
