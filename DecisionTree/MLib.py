@@ -1,6 +1,7 @@
 # Written by Alan Felt for CS6350 Machine Learning
 
 from cProfile import label
+from copy import deepcopy
 import numpy as np
 import pandas as pd
 
@@ -8,13 +9,14 @@ import pandas as pd
 # for leaf nodes, name is the same as the branch it is connected to
 # for regular nodes, name is the name of the attribute it represents. Its children will be named the values of the attributes values
 class Node:
-    def __init__(self, name, type, parent, children, label, depth):
+    def __init__(self, name, type, parent, children, label, depth, weight = 1):
         self.name = name  # name of the node
         self.type = type  # 'root', 'node', 'leaf', 'unknown'
         self.parent = parent  # will include a node (if not the root)
         self.children = children  # will include node(s) instance
         self.label = label
         self.depth = depth
+        self.weight = weight
         return
 
     def setChild(self, child_name_in, child_node_in):
@@ -46,6 +48,9 @@ class Node:
             return None # this should never be called
         else:
             return self.children[child_name_in] # return the child node with the attribute provided in child_name_in
+    
+    def getWeight(self):
+        return self.weight
 
 
 def validData(terms, attrib):
@@ -62,6 +67,16 @@ def validData(terms, attrib):
     #     return False
     return True
 
+
+def getPWeights(S):
+    labels = S['label'].unique()
+    summed_weight = np.zeros(len(labels))
+    for i in np.arange(len(labels)):
+        summed_weight[i] = S[S['label'] == labels[i]]['weights'].sum()
+    return dict(zip(labels,summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
+
+
+# input should be a single column of S
 def bestValue(S, empty_indicator=None):
     l, c = np.unique(S.to_numpy(), return_counts=True) # find the most comon value in attribute A
     if (empty_indicator != None):
@@ -71,6 +86,12 @@ def bestValue(S, empty_indicator=None):
         c = np.delete(c, idx) # remove unknown from the running for most common value
     best_value = l[c.argmax()] # find the most common value (index into L with the index of the largest # in c)
     return best_value
+
+
+def bestLabel(S):
+    pWeight = getPWeights(S)
+    return max(zip(pWeight.values(), pWeight.keys()))[1] # https://www.geeksfor .org/python-get-key-with-maximum-value-in-dictionary/
+
 
 def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=None, empty_indicator=None, change_label=None):
     terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
@@ -93,55 +114,48 @@ def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=Non
     if (change_label != None):
         for raw_label in change_label.keys():
             terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
-
     if (not validData(terms, attrib)): # check for incorrect attribute values
         return
-    return terms
+    D = np.ones(len(terms))
+    weight = pd.DataFrame(D, columns=['weights'])
+    weightS = terms.join(weight)
+    return weightS
 
 
 def entropy(S):
-    labels = S['label'].to_numpy() # get the labels in S
-    num_S = len(labels) # number of labels is size of S
-    l, c = np.unique(labels, return_counts=True) # find unique labels in S
-    p = c / num_S # calculate array of probabilities of each label
+    pWeights = getPWeights(S)
+    pTotal = sum(pWeights.values())
+    p = list(pWeights.values()) / pTotal
     H_S = -np.sum(p * np.log2(p)) # sum of the probabilites multiplied by log2 of probabilities
     return H_S
 
-
-def weightEntropy(S, weights):
-    labels = S['label'].to_numpy()
-    total = sum(labels)
-    
-
+# untested with weights but should be working
 def majorityError(S): 
-    labels = S['label'].to_numpy()  # get all the labels in the current set S
-    num_S = len(labels)  # count the labels
+    pWeights = getPWeights(S)
+    pTotal = sum(pWeights.values())
 
-    # find all the unique labels and how many of each unique label there are
-    l, c = np.unique(labels, return_counts=True)
-    best_choice = c.argmax()  # choose the label with the greatest representation
-
+    best_choice = max(zip(pWeights.values(), pWeights.keys()))[1]
+    del pWeights[best_choice]
     # delete the count of the label with the greatest representation
     # sum up the number of remaining labels
-    neg_choice = np.sum(np.delete(c, best_choice, axis=0))
+    neg_choice = np.sum(pWeights.values())
 
     # calculate ratio of # of not best labels over the total number of labels
-    m_error = neg_choice / num_S
+    m_error = neg_choice / pTotal
 
     # return this number
     return m_error
 
 
 def giniIndex(S):
-    labels = S['label'].to_numpy() # get all labels in S
-    num_S = len(labels) # count the labels in S
-    l, c = np.unique(labels, return_counts=True) # find the unique labels and their respective counts
-    p_l = c / num_S # calculate the probability of each label
+    pWeights = getPWeights(S)
+    pTotal = sum(pWeights.values())
+    p_l = list(pWeights.values) / pTotal # calculate the probability of each label
     gi = 1 - np.sum(np.square(p_l)) # square and sum the probabilities
     return gi
 
 
-def bestAttribute(S, method='entropy', weights=None):
+def bestAttribute(S, attribs, method='entropy'):
     if (method == 'majority_error'): # choose method to use
         Purity_S = majorityError(S)
     elif (method == 'gini'):
@@ -157,7 +171,7 @@ def bestAttribute(S, method='entropy', weights=None):
     best_ig = 0 # track the best information gain
     best_attribute = "" # track the Attribute of the best information gain
 
-    for A in S.drop('label', axis=1).columns:  # for each attribute in S except for the label https://stackoverflow.com/questions/29763620/how-to-select-all-columns-except-one-in-pandas
+    for A in attribs:  # for each attribute in S except for the label https://stackoverflow.com/questions/29763620/how-to-select-all-columns-except-one-in-pandas
         total = 0
         # get the unique values that attribute A has in S
         values_A = S.get(A).unique()
@@ -185,14 +199,11 @@ def bestAttribute(S, method='entropy', weights=None):
     return best_attribute
 
 
-def bestLabel(S):
-    l, c = np.unique(S['label'].to_numpy(), return_counts=True) # find the best label in S (most common)
-    best_label = l[c.argmax()]
-    return best_label
+
 
 # assumes that there is at least one attribute to split on
-def stump(S, attribs, method="entropy", weights=None):
-    A = bestAttribute(S, method, weights)
+def stump(S, attribs, method="entropy"):
+    A = bestAttribute(S, attribs=attribs, method=method)
     new_root = Node(A, "root", None, None, None, 0)
     for v in attribs[A]:
         Sv = S[S[A] == v].drop(A, axis=1) # find the subset where S[A] == v and drop the column A
@@ -209,11 +220,13 @@ def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf):
     # Check if all examples have one label
     # Check whether there are no more attributes to split on
     # if so make a leaf node
-    if (S['label'].unique().size == 1 or S.columns.size == 1): # columns.size == 1 because the label column does not count
+    if (S['label'].unique().size == 1 or len(attribs) == 0): 
         label = bestLabel(S)
         return Node(label, "leaf", None, None, label, root.getDepth() + 1)
 
-    A = bestAttribute(S, method) # get the best attribute to split on
+    A = bestAttribute(S, attribs=attribs, method=method) # get the best attribute to split on
+    attribsv = deepcopy(attribs)
+    del attribsv[A] # delete the key that we are now splitting on
 
     if (root == None): # if there is no root, make one
         new_root = Node(A, "root", None, None, None, 0)
@@ -223,14 +236,13 @@ def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf):
     # v is the branch, not a node, unless v splits the dataset into one with no subsets
     for v in attribs[A]:
         Sv = S[S[A] == v].drop(A, axis=1) # find the subset where S[A] == v and drop the column A
-        
         if (Sv.index.size == 0):  # if the subset is empty, make a child with the best label in S
             v_child = Node(v, "leaf", None, None, bestLabel(S), root.getDepth() + 1)
         elif (new_root.getDepth() == (max_depth - 1)): # if we are almost at depth, truncate and make a child with the best label in the subset
             #print("At depth, truncating")
             v_child = Node(v, "leaf", None, None, bestLabel(Sv), new_root.getDepth() + 1)
         else:  # if the subset is not empty make a child with the branch v but not the node name v, node name will be best attribute found for splitting Sv
-            v_child = ID3(Sv, attribs, new_root, method, max_depth) # recursive call down the tree
+            v_child = ID3(Sv, attribsv, new_root, method, max_depth) # recursive call down the tree
         new_root.setChild(v, v_child) # set a new child of new_root
     return new_root
 
@@ -279,7 +291,7 @@ def treeError(tree, S):
     return error
 
 def processData(tree, S):
-    ht_xi = np.squeeze(np.zeros([S.index.size, 1]))
+    ht_xi = np.zeros(S.index.size)
     for data in S.itertuples(index=True): # for each datapoint in S
         ht_xi[data.Index] = follower(data._asdict(), tree)
     return ht_xi
@@ -289,10 +301,11 @@ def updateWeights(weights):
     return
 
 def adaBoost(S, attribs, T):
-    m = S.index.size
-    D = np.squeeze(np.ones([1, m])) * 1/m
+    m = len(S)
+    D = np.ones(m) * 1/m
+    S['weight'] = D
     for t in np.arange(1,T):
-        h_t = stump(S=S, attribs=attribs, method='entropy', weights=D)
+        h_t = stump(S=S, attribs=attribs, method='entropy')
         e_t = processData(tree=h_t, S=S)
         alpha_t = 1/2 * np.log((1-e_t)/e_t)
         D = D * np.exp(-alpha_t * S.keys() )

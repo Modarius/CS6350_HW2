@@ -1,4 +1,5 @@
 import MLib as ml
+import numpy as np
 
 def main():
     # initilalization data for bank dataset
@@ -38,8 +39,9 @@ def main():
     
     train_data = ml.importData(train_filepath, attribs, attrib_labels, numeric_data=numeric_data, change_label=new_labels)
     tests_data = ml.importData(tests_filepath, attribs, attrib_labels, numeric_data=numeric_data, change_label=new_labels)
-
-    ml.adaBoost(train_data, attribs=attribs, T=10)
+    del attribs['label'] # remove the label as a valid attribute
+    id3 = ml.ID3(train_data, attribs, max_depth=5)
+    aB = ml.adaBoost(train_data, attribs=attribs, T=10)
     return
 
 if __name__ == "__main__":
