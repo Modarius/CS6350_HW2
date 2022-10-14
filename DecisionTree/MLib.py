@@ -53,73 +53,12 @@ class Node:
         return self.weight
 
 
-def validData(terms, attrib):
-    for label in attrib.keys(): # for all the attributes possible
-        label_values = set(terms.get(label).unique()) # get the set of values for attribute A
-        if (not attrib[label].issubset(label_values)): # check if there is a value from the data not included in the possible values for A
-            # print the offending invalid attribute value
-            print("Attribute " + label + " cannot take value " +
-                  str(label_values.difference(attrib[label])))
-            return False
-    # if (not set(terms.index.unique().to_numpy()).issubset(data_labels)): # also check that all the labels are valid
-    #     print("Data Label cannot take value " +
-    #           str(set(terms.index.unique()).difference(data_labels))) # return values that are not valid
-    #     return False
-    return True
-
-
 def getPWeights(S):
     labels = S['label'].unique()
     summed_weight = np.zeros(len(labels))
     for i in np.arange(len(labels)):
         summed_weight[i] = S[S['label'] == labels[i]]['weights'].sum()
     return dict(zip(labels,summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
-
-
-# input should be a single column of S
-def bestValue(S, empty_indicator=None):
-    l, c = np.unique(S.to_numpy(), return_counts=True) # find the most comon value in attribute A
-    if (empty_indicator != None):
-        # this is a hacky way of getting the index of 'unknown' in l and c (unique labels, and their counts)
-        idx = np.squeeze(np.where(l == empty_indicator))[()] # https://thispointer.com/find-the-index-of-a-value-in-numpy-array/, https://stackoverflow.com/questions/773030/why-are-0d-arrays-in-numpy-not-considered-scalar
-        l = np.delete(l, idx) # remove unknown from the running for most common value
-        c = np.delete(c, idx) # remove unknown from the running for most common value
-    best_value = l[c.argmax()] # find the most common value (index into L with the index of the largest # in c)
-    return best_value
-
-
-def bestLabel(S):
-    pWeight = getPWeights(S)
-    return max(zip(pWeight.values(), pWeight.keys()))[1] # https://www.geeksfor .org/python-get-key-with-maximum-value-in-dictionary/
-
-
-def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=None, empty_indicator=None, change_label=None):
-    terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
-    if (numeric_data != None): # if there is information on which columns are numeric
-        for label in numeric_data.keys(): #the for all the labels in numeric data
-            column = terms.get(label) # get the column pertaining to that label
-            new_column = column.copy(deep=True) # make a second copy, but not a linked copy
-            split_value = np.median(column.to_numpy()) # find the median numeric value to split on
-            # find all the values in the column that are less than and equal to 
-            # and greater than and replace them with a label from numeric_data
-            new_column.where(column <= split_value, numeric_data[label][0], inplace=True) 
-            new_column.where(column > split_value, numeric_data[label][1], inplace=True)
-            terms[label] = new_column # replace the column with the updated one
-    if (empty_indicator != None):
-        for label in terms.columns.to_numpy():
-            if(terms[label].unique().__contains__(empty_indicator)): # if the column contains unknown values
-                column = terms[label] # get that column
-                best_value = bestValue(terms[label], empty_indicator)
-                terms[label].where(column != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
-    if (change_label != None):
-        for raw_label in change_label.keys():
-            terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
-    if (not validData(terms, attrib)): # check for incorrect attribute values
-        return
-    D = np.ones(len(terms))
-    weight = pd.DataFrame(D, columns=['weights'])
-    weightS = terms.join(weight)
-    return weightS
 
 
 def entropy(S):
@@ -199,7 +138,65 @@ def bestAttribute(S, attribs, method='entropy'):
     return best_attribute
 
 
+# input should be a single column of S
+def bestValue(S, empty_indicator=None):
+    l, c = np.unique(S.to_numpy(), return_counts=True) # find the most comon value in attribute A
+    if (empty_indicator != None):
+        # this is a hacky way of getting the index of 'unknown' in l and c (unique labels, and their counts)
+        idx = np.squeeze(np.where(l == empty_indicator))[()] # https://thispointer.com/find-the-index-of-a-value-in-numpy-array/, https://stackoverflow.com/questions/773030/why-are-0d-arrays-in-numpy-not-considered-scalar
+        l = np.delete(l, idx) # remove unknown from the running for most common value
+        c = np.delete(c, idx) # remove unknown from the running for most common value
+    best_value = l[c.argmax()] # find the most common value (index into L with the index of the largest # in c)
+    return best_value
 
+
+def bestLabel(S):
+    pWeight = getPWeights(S)
+    return max(zip(pWeight.values(), pWeight.keys()))[1] # https://www.geeksfor .org/python-get-key-with-maximum-value-in-dictionary/
+
+
+def validData(terms, attrib):
+    for label in attrib.keys(): # for all the attributes possible
+        label_values = set(terms.get(label).unique()) # get the set of values for attribute A
+        if (not attrib[label].issubset(label_values)): # check if there is a value from the data not included in the possible values for A
+            # print the offending invalid attribute value
+            print("Attribute " + label + " cannot take value " +
+                  str(label_values.difference(attrib[label])))
+            return False
+    # if (not set(terms.index.unique().to_numpy()).issubset(data_labels)): # also check that all the labels are valid
+    #     print("Data Label cannot take value " +
+    #           str(set(terms.index.unique()).difference(data_labels))) # return values that are not valid
+    #     return False
+    return True
+
+
+def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=None, empty_indicator=None, change_label=None):
+    terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
+    if (numeric_data != None): # if there is information on which columns are numeric
+        for label in numeric_data.keys(): #the for all the labels in numeric data
+            column = terms.get(label) # get the column pertaining to that label
+            new_column = column.copy(deep=True) # make a second copy, but not a linked copy
+            split_value = np.median(column.to_numpy()) # find the median numeric value to split on
+            # find all the values in the column that are less than and equal to 
+            # and greater than and replace them with a label from numeric_data
+            new_column.where(column <= split_value, numeric_data[label][0], inplace=True) 
+            new_column.where(column > split_value, numeric_data[label][1], inplace=True)
+            terms[label] = new_column # replace the column with the updated one
+    if (empty_indicator != None):
+        for label in terms.columns.to_numpy():
+            if(terms[label].unique().__contains__(empty_indicator)): # if the column contains unknown values
+                column = terms[label] # get that column
+                best_value = bestValue(terms[label], empty_indicator)
+                terms[label].where(column != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
+    if (change_label != None):
+        for raw_label in change_label.keys():
+            terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
+    if (not validData(terms, attrib)): # check for incorrect attribute values
+        return
+    D = np.ones(len(terms))
+    weight = pd.DataFrame(D, columns=['weights'])
+    weightS = terms.join(weight)
+    return weightS
 
 # assumes that there is at least one attribute to split on
 def stump(S, attribs, method="entropy"):
@@ -290,15 +287,13 @@ def treeError(tree, S):
     error = c_wrong / (c_right + c_wrong) # find the ratio of wrong answers to all answers (error)
     return error
 
+
 def processData(tree, S):
     ht_xi = np.zeros(S.index.size)
     for data in S.itertuples(index=True): # for each datapoint in S
         ht_xi[data.Index] = follower(data._asdict(), tree)
     return ht_xi
         
-
-def updateWeights(weights):
-    return
 
 def adaBoost(S, attribs, T):
     m = len(S)
