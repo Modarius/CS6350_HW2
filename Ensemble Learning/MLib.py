@@ -315,16 +315,23 @@ class Ensemble:
         self.weights = weights # numpy array of weights for each tree
         self.trees = trees # numpy array of root nodes
         return
-    def HFinal(self, S):
+    def HFinal(self, S, idxs=None):
+        if (idxs==None):
+            trees = self.trees
+            weights = self.weights
+        else:
+            trees = np.array([self.trees[idxs]])
+            weights = np.array([self.weights[idxs]])
+
         num_S = len(S)
         out = np.empty(num_S, dtype=int)
         data = S.to_dict(orient='records')
         for s_idx in np.arange(num_S): # for each data point in S
-            ht_x = np.zeros(len(self.trees))
-            for t_idx in np.arange(len(self.trees)): # for each tree, get its hypothesis on the current data
+            ht_x = np.zeros(trees.size)
+            for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
                 in_data = deepcopy(data[s_idx])
-                ht_x[t_idx] = follower(in_data, self.trees[t_idx]) # save the hypothesis
-            out[s_idx] = np.sign(np.sum(self.weights * ht_x))
+                ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
+            out[s_idx] = np.sign(np.sum(weights * ht_x))
         return out
 
     def getWeights(self):
