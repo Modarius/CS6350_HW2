@@ -16,8 +16,8 @@ def LMSRegression(S, r=.001, threshold=.001, label_name=''):
 def calc_dj_dw(yi, wT, xxi, xj):
     m = len(xj)
     temp = 0
-    for i in np.arange(m):
-        temp += sum(( yi - np.sum(np.multiply(wT, xxi),axis=1)) * xj[i])
+    for i in np.arange(m): 
+        temp += sum(( yi - np.sum(np.matmul(wT, xxi),axis=1)) * xj[i])
     return -temp
 
 def main():

@@ -57,13 +57,13 @@ def getPWeights(S):
     summed_weight = np.zeros(len(labels))
     for i in np.arange(len(labels)):
         summed_weight[i] = S[S['label'] == labels[i]]['weight'].sum()
-    return dict(zip(labels,summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
+    return dict(zip(labels, summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
 
 
 def entropy(S):
     pWeights = getPWeights(S)
     pTotal = sum(pWeights.values())
-    p = list(pWeights.values()) / pTotal
+    p = np.array(list(pWeights.values())) / pTotal
     H_S = -np.sum(p * np.log2(p)) # sum of the probabilites multiplied by log2 of probabilities
     return H_S
 
@@ -76,7 +76,7 @@ def majorityError(S):
     del pWeights[best_choice]
     # delete the count of the label with the greatest representation
     # sum up the number of remaining labels
-    neg_choice = np.sum(pWeights.values())
+    neg_choice = np.array(list(pWeights.values())).sum()
 
     # calculate ratio of # of not best labels over the total number of labels
     m_error = neg_choice / pTotal
@@ -88,13 +88,13 @@ def majorityError(S):
 def giniIndex(S):
     pWeights = getPWeights(S)
     pTotal = sum(pWeights.values())
-    p_l = list(pWeights.values) / pTotal # calculate the probability of each label
+    p_l = np.array(list(pWeights.values())) / pTotal # calculate the probability of each label
     gi = 1 - np.sum(np.square(p_l)) # square and sum the probabilities
     return gi
 
 
 def bestAttribute(S, attribs, method='entropy', rand_tree=False):
-    if(rand_tree & S.columns.size > 2): # has more than the label and weight columns, eg, has an attribute to split on
+    if (rand_tree & S.columns.size > 2): # has more than the label and weight columns, eg, has an attribute to split on
         T = S[attribs.keys()]
         T = T.sample(frac=1/10, replace=False, axis='columns')
         attribs = {key:attribs[key] for key in T.columns.to_numpy()}
@@ -115,7 +115,7 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
     num_S = np.size(S, 0) # number of entries in S
     ig = dict() # initialize a dictionary
     best_ig = 0 # track the best information gain
-    best_attribute = "" # track the Attribute of the best information gain
+    best_attribute = None # track the Attribute of the best information gain
 
     for A in attribs:  # for each attribute in S except for the label https://stackoverflow.com/questions/29763620/how-to-select-all-columns-except-one-in-pandas
         total = 0
@@ -138,12 +138,14 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
             # sum the weighted values of each purity for v in A
             total = total + num_Sv/num_S * Purity_Sv
         # subtract the sum from the purity of S to get the information gain
-        ig[A] = Purity_S - total
+        temp = Purity_S - total
+        ig[A] = temp # i am getting negative info gain :(
         if (ig[A] >= best_ig):  # if that information gain is better than the others, select that attribute as best
             best_attribute = A
             best_ig = ig[A]
-    if (best_attribute == ""): # handle edge case where no value is best, in that case just return what is in A (should be one value)
-        best_attribute = A
+    if (best_attribute == None):
+        print("WHYYYYYYY")
+        exit()
     # once we have checked all attributes A in S, return the best attribute to split on
     return best_attribute
 
@@ -184,8 +186,8 @@ def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=Non
     terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
     if (numeric_data != None): # if there is information on which columns are numeric
         for label in numeric_data.keys(): #the for all the labels in numeric data
-            column = terms.get(label) # get the column pertaining to that label
-            new_column = column.copy(deep=True) # make a second copy, but not a linked copy
+            column = terms[label] # get the column pertaining to that label
+            new_column = deepcopy(column) # make a second copy, but not a linked copy
             split_value = np.median(column.to_numpy()) # find the median numeric value to split on
             # find all the values in the column that are less than and equal to 
             # and greater than and replace them with a label from numeric_data
@@ -203,7 +205,7 @@ def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=Non
             terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
     if (not validData(terms, attrib)): # check for incorrect attribute values
         return
-    D = np.ones(len(terms))
+    D = np.ones(len(terms))/len(terms)
     weight = pd.DataFrame(D, columns=['weight'])
     weightS = terms.join(weight)
     return weightS
@@ -229,7 +231,11 @@ def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf, rand_tree=Fal
     # if so make a leaf node
     if (S['label'].unique().size == 1 or len(attribs) == 0): 
         label = bestLabel(S)
-        return Node(label, "leaf", None, None, label, root.getDepth() + 1)
+        if (root != None):
+            return Node(label, "leaf", None, None, label, root.getDepth() + 1)
+        else:
+            print("Error, no root and trying to make a leaf")
+            return None
 
     A = bestAttribute(S, attribs=attribs, method=method, rand_tree=rand_tree) # get the best attribute to split on
     attribsv = deepcopy(attribs)
@@ -321,34 +327,50 @@ class Ensemble:
             out[s_idx] = np.sign(np.sum(self.weights * ht_x))
         return out
 
-def adaBoost(S, attribs, T):
-    S = deepcopy(S)
+    def getWeights(self):
+        return self.weights
+
+    def getTrees(self):
+        return self.trees
+
+
+def adaBoost(S, attribs, T, prev_ensemble=None):
     m = len(S)
-    D = np.ones(m) * 1/m
-    S['weight'] = D
-    h_t = np.empty(T, dtype=Node)
+    if(prev_ensemble == None):
+        D = np.ones(m) * 1/m
+        S['weight'] = D
+    else:
+        D = S['weight'].to_numpy()
+    trees = np.empty(T, dtype=Node)
     alpha_t = np.zeros(T)
     for t in np.arange(T):
-        h_t[t] = stump(S=S, attribs=attribs, method='entropy')
-        h_t_xi = processData(tree=h_t[t], S=S)
+        trees[t] = stump(S=S, attribs=attribs, method='entropy')
+        h_t_xi = processData(tree=trees[t], S=S)
         e_t = sum(D[h_t_xi != S['label']])
         alpha_t[t] = 1/2 * np.log((1-e_t)/e_t)
         inner = (-alpha_t[t] * S['label'].to_numpy() * h_t_xi)
         D_1 = D * np.exp(inner.astype(float)) # https://stackoverflow.com/questions/47966728/how-to-fix-float-object-has-no-attribute-exp
         D = D_1 / sum(D_1)
         S['weight'] = D
-    return Ensemble(alpha_t, h_t)
+    if(prev_ensemble != None):
+        alpha_t = np.append(prev_ensemble.getWeights(), alpha_t)
+        trees = np.append(prev_ensemble.getTrees(), trees)
+    return Ensemble(alpha_t, trees), S
 
-def baggedDecisionTree(S, attribs, T, m):
+def baggedDecisionTree(S, attribs, T, m, prev_ensemble=None):
     trees = np.empty(T, dtype=Node)
     for t in np.arange(T):
         bag = S.sample(m, replace=True)
         trees[t] = ID3(bag, attribs)
-    return Ensemble(np.ones(T), trees)
+    if (prev_ensemble != None):
+        trees = np.append(prev_ensemble.getTrees(), trees)
+    return Ensemble(np.ones(len(trees)), trees)
 
-def randomTree(S, attribs, T, m):
+def randomTree(S, attribs, T, m, prev_ensemble=None):
     trees = np.empty(T, dtype=Node)
     for t in np.arange(T):
         bag = S.sample(m, replace=True)
         trees[t] = ID3(bag, attribs, rand_tree=True)
-    return Ensemble(np.ones(T), trees)
+    if (prev_ensemble != None):
+        trees = np.append(prev_ensemble.getTrees(), trees)
+    return Ensemble(np.ones(len(trees)), trees)
