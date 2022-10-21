@@ -62,7 +62,7 @@ def main():
         bT_tests_error = np.zeros(500)
         rT_train_error = np.zeros(500)
         rT_tests_error = np.zeros(500)
-        for i in np.arange(0, 500, 1):
+        for i in np.arange(0, 5, 1):
             tick = time()
             aB, aB_train_data = ml.adaBoost(aB_train_data, attribs=attribs, T=1, prev_ensemble=aB)
             aB_train_error[i] = sum(train_truth != aB.HFinal(train_data)) / num_train

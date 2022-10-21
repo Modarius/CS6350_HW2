@@ -54,8 +54,8 @@ class Node:
 
 def getPWeights(S):
     labels = S['label'].unique()
-    summed_weight = np.zeros(len(labels))
-    for i in np.arange(len(labels)):
+    summed_weight = np.zeros(labels.size)
+    for i in np.arange(labels.size):
         summed_weight[i] = S[S['label'] == labels[i]]['weight'].sum()
     return dict(zip(labels, summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
 
@@ -112,7 +112,6 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
         print("Not a valid method")
         return
     
-    num_S = np.size(S, 0) # number of entries in S
     ig = dict() # initialize a dictionary
     best_ig = 0 # track the best information gain
     best_attribute = None # track the Attribute of the best information gain
@@ -124,8 +123,6 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
         for v in values_A:  # for each of those values
             # select a subset of S where S[A] equals that value of A
             Sv = S[S[A] == v]
-            # get the size of the subset (number of entries)
-            num_Sv = np.size(Sv, 0)
             if (method == 'entropy'):
                 Purity_Sv = entropy(Sv)
             elif (method == 'gini'):
@@ -136,14 +133,14 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
                 print("Not a valid method")
                 return
             # sum the weighted values of each purity for v in A
-            total = total + num_Sv/num_S * Purity_Sv
+            total = total + Sv.shape[0]/S.shape[0] * Purity_Sv
         # subtract the sum from the purity of S to get the information gain
         temp = Purity_S - total
         ig[A] = temp # i am getting negative info gain :(
         if (ig[A] >= best_ig):  # if that information gain is better than the others, select that attribute as best
             best_attribute = A
             best_ig = ig[A]
-    if (best_attribute == None):
+    if best_attribute is None:
         print("WHYYYYYYY")
         exit()
     # once we have checked all attributes A in S, return the best attribute to split on
@@ -153,7 +150,7 @@ def bestAttribute(S, attribs, method='entropy', rand_tree=False):
 # input should be a single column of S
 def bestValue(S, empty_indicator=None):
     l, c = np.unique(S.to_numpy(), return_counts=True) # find the most comon value in attribute A
-    if (empty_indicator != None):
+    if empty_indicator is not None:
         # this is a hacky way of getting the index of 'unknown' in l and c (unique labels, and their counts)
         idx = np.squeeze(np.where(l == empty_indicator))[()] # https://thispointer.com/find-the-index-of-a-value-in-numpy-array/, https://stackoverflow.com/questions/773030/why-are-0d-arrays-in-numpy-not-considered-scalar
         l = np.delete(l, idx) # remove unknown from the running for most common value
@@ -184,7 +181,7 @@ def validData(terms, attrib):
 
 def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=None, empty_indicator=None, change_label=None):
     terms = pd.read_csv(filename, sep=',', names=attrib_labels, index_col=index_col) # read in the csv file into a DataFrame object , index_col=index_col
-    if (numeric_data != None): # if there is information on which columns are numeric
+    if numeric_data is not None: # if there is information on which columns are numeric
         for label in numeric_data.keys(): #the for all the labels in numeric data
             column = terms[label] # get the column pertaining to that label
             new_column = deepcopy(column) # make a second copy, but not a linked copy
@@ -194,18 +191,20 @@ def importData(filename, attrib, attrib_labels, index_col=None, numeric_data=Non
             new_column.where(column <= split_value, numeric_data[label][0], inplace=True) 
             new_column.where(column > split_value, numeric_data[label][1], inplace=True)
             terms[label] = new_column # replace the column with the updated one
-    if (empty_indicator != None):
+    if empty_indicator is not None:
         for label in terms.columns.to_numpy():
             if(terms[label].unique().__contains__(empty_indicator)): # if the column contains unknown values
                 column = terms[label] # get that column
                 best_value = bestValue(terms[label], empty_indicator)
                 terms[label].where(column != empty_indicator, best_value, inplace=True) # when column2 doesnt equal indicator, keep it as is, else replace indicator with most common value
-    if (change_label != None):
+    if change_label is not None:
         for raw_label in change_label.keys():
             terms['label'].where(terms['label'] != raw_label, change_label[raw_label], inplace=True)
     if (not validData(terms, attrib)): # check for incorrect attribute values
         return
-    D = np.ones(len(terms))/len(terms)
+
+    num_T = terms.shape[0]
+    D = np.ones(num_T)/num_T
     weight = pd.DataFrame(D, columns=['weight'])
     weightS = terms.join(weight)
     return weightS
@@ -215,7 +214,7 @@ def stump(S, attribs, method="entropy"):
     A = bestAttribute(S, attribs=attribs, method=method)
     new_root = Node(A, "root", None, None, None, 0)
     for v in attribs[A]:
-        Sv = S[S[A] == v].drop(A, axis=1) # find the subset where S[A] == v and drop the column A
+        Sv = S[S[A] == v] # find the subset where S[A] == v and dont need to drop the column A
         if (Sv.index.size == 0):  # if the subset is empty, make a child with the best label in S
             label = bestLabel(S)
         else:
@@ -231,7 +230,7 @@ def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf, rand_tree=Fal
     # if so make a leaf node
     if (S['label'].unique().size == 1 or len(attribs) == 0): 
         label = bestLabel(S)
-        if (root != None):
+        if root is not None:
             return Node(label, "leaf", None, None, label, root.getDepth() + 1)
         else:
             print("Error, no root and trying to make a leaf")
@@ -241,7 +240,7 @@ def ID3(S, attribs, root=None, method="entropy", max_depth=np.inf, rand_tree=Fal
     attribsv = deepcopy(attribs)
     del attribsv[A] # delete the key that we are now splitting on
 
-    if (root == None): # if there is no root, make one
+    if root is None: # if there is no root, make one
         new_root = Node(A, "root", None, None, None, 0)
     else:
         new_root = Node(A, "node", None, None, None, root.getDepth() + 1)
@@ -316,22 +315,36 @@ class Ensemble:
         self.trees = trees # numpy array of root nodes
         return
     def HFinal(self, S, idxs=None):
-        if (idxs==None):
+        if idxs is None:
             trees = self.trees
-            weights = self.weights
+            if self.weights is None:
+                weights = None
+            else:
+                weights = self.weights
         else:
             trees = np.array([self.trees[idxs]])
-            weights = np.array([self.weights[idxs]])
+            if self.weights is None:
+                weights = None
+            else:
+                weights = np.array([self.weights[idxs]])
 
-        num_S = len(S)
+        num_S = S.shape[0]
         out = np.empty(num_S, dtype=int)
         data = S.to_dict(orient='records')
-        for s_idx in np.arange(num_S): # for each data point in S
-            ht_x = np.zeros(trees.size)
-            for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
-                in_data = deepcopy(data[s_idx])
-                ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
-            out[s_idx] = np.sign(np.sum(weights * ht_x))
+        if weights is None:
+            for s_idx in np.arange(num_S): # for each data point in S
+                ht_x = np.zeros(trees.size)
+                for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
+                    in_data = deepcopy(data[s_idx])
+                    ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
+                out[s_idx] = np.sign(np.sum(ht_x))
+        else:
+            for s_idx in np.arange(num_S): # for each data point in S
+                ht_x = np.zeros(trees.size)
+                for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
+                    in_data = deepcopy(data[s_idx])
+                    ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
+                out[s_idx] = np.sign(np.sum(weights * ht_x))
         return out
 
     def getWeights(self):
@@ -342,8 +355,8 @@ class Ensemble:
 
 
 def adaBoost(S, attribs, T, prev_ensemble=None):
-    m = len(S)
-    if(prev_ensemble == None):
+    m = S.shape[0]
+    if prev_ensemble is None:
         D = np.ones(m) * 1/m
         S['weight'] = D
     else:
@@ -359,7 +372,7 @@ def adaBoost(S, attribs, T, prev_ensemble=None):
         D_1 = D * np.exp(inner.astype(float)) # https://stackoverflow.com/questions/47966728/how-to-fix-float-object-has-no-attribute-exp
         D = D_1 / sum(D_1)
         S['weight'] = D
-    if(prev_ensemble != None):
+    if prev_ensemble is not None:
         alpha_t = np.append(prev_ensemble.getWeights(), alpha_t)
         trees = np.append(prev_ensemble.getTrees(), trees)
     return Ensemble(alpha_t, trees), S
@@ -369,15 +382,19 @@ def baggedDecisionTree(S, attribs, T, m, prev_ensemble=None):
     for t in np.arange(T):
         bag = S.sample(m, replace=True)
         trees[t] = ID3(bag, attribs)
-    if (prev_ensemble != None):
+    try:
         trees = np.append(prev_ensemble.getTrees(), trees)
-    return Ensemble(np.ones(len(trees)), trees)
+    except:
+        pass
+    return Ensemble(None, trees)
 
 def randomTree(S, attribs, T, m, prev_ensemble=None):
     trees = np.empty(T, dtype=Node)
     for t in np.arange(T):
         bag = S.sample(m, replace=True)
         trees[t] = ID3(bag, attribs, rand_tree=True)
-    if (prev_ensemble != None):
+    try:
         trees = np.append(prev_ensemble.getTrees(), trees)
-    return Ensemble(np.ones(len(trees)), trees)
+    except:
+        pass
+    return Ensemble(None, trees)
