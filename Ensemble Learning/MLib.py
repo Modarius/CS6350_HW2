@@ -54,29 +54,29 @@ class Node:
 
 def getPWeights(S):
     labels = S['label'].unique()
-    summed_weight = np.zeros(labels.size)
+    summed_weight = np.empty(labels.size)
     for i in np.arange(labels.size):
         summed_weight[i] = S[S['label'] == labels[i]]['weight'].sum()
-    return dict(zip(labels, summed_weight)) # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
+    return labels, summed_weight # https://www.geeksforgeeks.org/python-convert-two-lists-into-a-dictionary/
 
 
 def entropy(S):
-    pWeights = getPWeights(S)
-    pTotal = sum(pWeights.values())
-    p = np.array(list(pWeights.values())) / pTotal
+    labels, pWeights = getPWeights(S)
+    pTotal = sum(pWeights)
+    p = pWeights / pTotal
     H_S = -np.sum(p * np.log2(p)) # sum of the probabilites multiplied by log2 of probabilities
     return H_S
 
 # untested with weights but should be working
 def majorityError(S): 
-    pWeights = getPWeights(S)
-    pTotal = sum(pWeights.values())
+    labels, pWeights = getPWeights(S)
+    pTotal = sum(pWeights)
 
-    best_choice = max(zip(pWeights.values(), pWeights.keys()))[1]
+    best_choice = max(zip(pWeights, labels))[1]
     del pWeights[best_choice]
     # delete the count of the label with the greatest representation
     # sum up the number of remaining labels
-    neg_choice = np.array(list(pWeights.values())).sum()
+    neg_choice = pWeights.sum()
 
     # calculate ratio of # of not best labels over the total number of labels
     m_error = neg_choice / pTotal
@@ -86,9 +86,9 @@ def majorityError(S):
 
 
 def giniIndex(S):
-    pWeights = getPWeights(S)
-    pTotal = sum(pWeights.values())
-    p_l = np.array(list(pWeights.values())) / pTotal # calculate the probability of each label
+    labels, pWeights = getPWeights(S)
+    pTotal = pWeights.sum()
+    p_l = pWeights / pTotal # calculate the probability of each label
     gi = 1 - np.sum(np.square(p_l)) # square and sum the probabilities
     return gi
 
@@ -96,7 +96,7 @@ def giniIndex(S):
 def bestAttribute(S, attribs, method='entropy', rand_tree=False):
     if (rand_tree & S.columns.size > 2): # has more than the label and weight columns, eg, has an attribute to split on
         T = S[attribs.keys()]
-        T = T.sample(frac=1/10, replace=False, axis='columns')
+        T = T.sample(frac=2, replace=False, axis='columns')
         attribs = {key:attribs[key] for key in T.columns.to_numpy()}
         T['label'] = S['label']
         T['weight'] = S['weight']
@@ -160,8 +160,8 @@ def bestValue(S, empty_indicator=None):
 
 
 def bestLabel(S):
-    pWeight = getPWeights(S)
-    return max(zip(pWeight.values(), pWeight.keys()))[1] # https://www.geeksfor .org/python-get-key-with-maximum-value-in-dictionary/
+    labels, pWeight = getPWeights(S)
+    return max(zip(pWeight, labels))[1] # https://www.geeksforgeeks.org/python-get-key-with-maximum-value-in-dictionary/
 
 
 def validData(terms, attrib):
@@ -304,7 +304,7 @@ def treeError(tree, S):
 
 
 def processData(tree, S):
-    ht_xi = np.zeros(S.index.size)
+    ht_xi = np.empty(S.index.size)
     for data in S.itertuples(index=True): # for each datapoint in S
         ht_xi[data.Index] = follower(data._asdict(), tree)
     return ht_xi
@@ -333,14 +333,14 @@ class Ensemble:
         data = S.to_dict(orient='records')
         if weights is None:
             for s_idx in np.arange(num_S): # for each data point in S
-                ht_x = np.zeros(trees.size)
+                ht_x = np.empty(trees.size)
                 for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
                     in_data = deepcopy(data[s_idx])
                     ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
                 out[s_idx] = np.sign(np.sum(ht_x))
         else:
             for s_idx in np.arange(num_S): # for each data point in S
-                ht_x = np.zeros(trees.size)
+                ht_x = np.empty(trees.size)
                 for t_idx in np.arange(trees.size): # for each tree, get its hypothesis on the current data
                     in_data = deepcopy(data[s_idx])
                     ht_x[t_idx] = follower(in_data, trees[t_idx]) # save the hypothesis
@@ -362,7 +362,7 @@ def adaBoost(S, attribs, T, prev_ensemble=None):
     else:
         D = S['weight'].to_numpy()
     trees = np.empty(T, dtype=Node)
-    alpha_t = np.zeros(T)
+    alpha_t = np.empty(T)
     for t in np.arange(T):
         trees[t] = stump(S=S, attribs=attribs, method='entropy')
         h_t_xi = processData(tree=trees[t], S=S)
