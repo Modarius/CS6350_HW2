@@ -54,14 +54,14 @@ def main():
         #     bT[i] = ml.baggedDecisionTree(examples, attribs=attribs, T=500, m=100, prev_ensemble=None)
         #     print(str(i) + " " + str((time() - tick)) + "s",flush=True)
 
-    #     train_truth = train_data['label'].to_numpy()
-    #     num_train = len(train_truth)
-    #     tests_truth = tests_data['label'].to_numpy()
-    #     num_tests = len(tests_truth)
-    #     aB_train_data = deepcopy(train_data)
-    #     aB = None
-    #     bT = None
-    #     rT = None
+        train_truth = train_data['label'].to_numpy()
+        num_train = len(train_truth)
+        tests_truth = tests_data['label'].to_numpy()
+        num_tests = len(tests_truth)
+        aB_train_data = deepcopy(train_data)
+        aB = None
+        bT = None
+        rT = None
         aB_train_error = np.zeros(500)
         aB_tests_error = np.zeros(500)
         aB_train_tree_error = np.zeros(500)
